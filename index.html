@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>漏斗滑坡示意</title>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; background: #dce9ff; }
+    #defaultCanvas0 { display: block; margin: 0 auto; }
+  </style>
+</head>
+<body>
+<script>
+let leftDrops = [];
+let rightDrops = [];
+let ripples = [];
+
+let leftFaucetX, rightFaucetX, faucetY;
+let waterLevel = 80;
+let dropSpeed = 5;
+
+let leftSlidePath = [];
+let rightSlidePath = [];
+
+let slideStartY, slideEndY;
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  leftFaucetX = width / 4;
+  rightFaucetX = (3 * width) / 4;
+  faucetY = 100;
+
+  // 調整滑坡起點與終點往上移（滑坡縮小）
+  slideStartY = faucetY + 40;  // 往上調整 20px
+  slideEndY = height / 2 - 40; // 往上調整 40px
+
+  createSlidePaths();
+}
+
+function draw() {
+  background(220, 240, 255);
+
+  drawFaucet(leftFaucetX);
+  drawFaucet(rightFaucetX);
+  drawSlides();
+  drawFunnelHole();
+  drawOceanWave();
+
+  handleDrops(leftDrops, leftSlidePath);
+  handleDrops(rightDrops, rightSlidePath);
+
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    ripples[i].update();
+    ripples[i].display();
+    if (ripples[i].isFinished()) {
+      ripples.splice(i, 1);
+    }
+  }
+
+  drawText();
+}
+
+function mousePressed() {
+  if (mouseX < width / 2) {
+    leftDrops.push(new WaterDrop(leftSlidePath));
+  } else {
+    rightDrops.push(new WaterDrop(rightSlidePath));
+  }
+  dropSpeed = min(dropSpeed + 1, 20);
+  waterLevel = min(height / 2, waterLevel + 8);
+}
+
+function drawFaucet(x) {
+  stroke(80);
+  strokeWeight(10);
+  line(x - 40, faucetY - 40, x + 40, faucetY - 40);
+  line(x, faucetY - 40, x, faucetY);
+  noStroke();
+  fill(100);
+  rect(x - 15, faucetY, 30, 20, 5);
+}
+
+function createSlidePaths() {
+  leftSlidePath = [];
+  let cx = width / 2;
+  let cy = slideEndY + 10;
+
+  for (let t = 0; t <= 1; t += 0.01) {
+    let x = bezierPoint(leftFaucetX, leftFaucetX - 80, cx - 30, cx, t);
+    let y = bezierPoint(slideStartY, slideStartY + 80, slideEndY - 20, cy, t);
+    leftSlidePath.push({ x, y });
+  }
+
+  rightSlidePath = [];
+  for (let t = 0; t <= 1; t += 0.01) {
+    let x = bezierPoint(rightFaucetX, rightFaucetX + 80, cx + 30, cx, t);
+    let y = bezierPoint(slideStartY, slideStartY + 80, slideEndY - 20, cy, t);
+    rightSlidePath.push({ x, y });
+  }
+}
+
+function drawSlides() {
+  stroke(100, 100, 150);
+  strokeWeight(6);
+  noFill();
+  beginShape();
+  for (let pt of leftSlidePath) {
+    vertex(pt.x, pt.y);
+  }
+  endShape();
+
+  beginShape();
+  for (let pt of rightSlidePath) {
+    vertex(pt.x, pt.y);
+  }
+  endShape();
+}
+
+function handleDrops(drops, slidePath) {
+  for (let i = drops.length - 1; i >= 0; i--) {
+    let d = drops[i];
+    d.update(slidePath);
+    d.display();
+    if (d.state === "done") {
+      ripples.push(new Ripple(d.x, height - waterLevel));
+      drops.splice(i, 1);
+    }
+  }
+}
+
+class WaterDrop {
+  constructor(slidePath) {
+    this.slidePath = slidePath;
+    this.index = 0;
+    this.x = slidePath[0].x;
+    this.y = slidePath[0].y - 20;
+    this.state = "falling";
+    this.speed = dropSpeed;
+  }
+
+  update(slidePath) {
+    if (this.state === "falling") {
+      this.y += this.speed;
+      if (this.y >= slidePath[0].y) {
+        this.state = "sliding";
+        this.index = 0;
+      }
+    } else if (this.state === "sliding") {
+      this.index += 1;
+      if (this.index < slidePath.length) {
+        this.x = slidePath[this.index].x;
+        this.y = slidePath[this.index].y;
+
+        if (this.index >= slidePath.length - 5) {
+          this.state = "dropping";
+          this.x = width / 2;
+        }
+      } else {
+        this.state = "dropping";
+        this.x = width / 2;
+      }
+    } else if (this.state === "dropping") {
+      this.y += this.speed;
+      if (this.y >= height - waterLevel) {
+        this.state = "done";
+      }
+    }
+  }
+
+  display() {
+    fill(100, 180, 255);
+    noStroke();
+    ellipse(this.x, this.y, 10);
+  }
+}
+
+class Ripple {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.r = 10;
+    this.opacity = 150;
+  }
+  update() {
+    this.r += 3;
+    this.opacity -= 5;
+  }
+  display() {
+    noFill();
+    stroke(80, 120, 255, this.opacity);
+    strokeWeight(2);
+    ellipse(this.x, this.y, this.r);
+  }
+  isFinished() {
+    return this.opacity <= 0;
+  }
+}
+
+function drawOceanWave() {
+  noStroke();
+  fill(100, 180, 255, 180);
+  beginShape();
+  vertex(0, height);
+  for (let x = 0; x <= width; x += 10) {
+    let y = height - waterLevel + sin(x * 0.02 + millis() * 0.005) * 10;
+    vertex(x, y);
+  }
+  vertex(width, height);
+  endShape(CLOSE);
+}
+
+function drawFunnelHole() {
+  fill(100, 120, 150);
+  noStroke();
+  ellipse(width / 2, slideEndY + 10, 40, 20);
+}
+
+function drawText() {
+  fill(30, 50, 80);
+  textSize(32);
+  textAlign(CENTER, CENTER);
+  text("Appreciate Every Second", width / 2, height / 2 + 10);
+}
+</script>
+</body>
+</html>
